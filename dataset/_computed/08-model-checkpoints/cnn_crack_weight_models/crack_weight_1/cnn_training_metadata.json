@@ -1,0 +1,26 @@
+{
+  "framework": "pytorch",
+  "model_path": "/home/theau/Documents/polytech/MA1-telecom/Q2/Digital twins/exam-implementation/dataset/_computed/08-model-checkpoints/cnn_crack_weight_models/crack_weight_1/cnn_crack_classifier.pt",
+  "input_shape": [
+    50,
+    9
+  ],
+  "samples": 744,
+  "split_counts": {
+    "train": 528,
+    "val": 108,
+    "test": 108
+  },
+  "class_counts": {
+    "no_crack": 701,
+    "crack": 43
+  },
+  "seed": 2026,
+  "crack_class_weight": 1.0,
+  "confusion_matrix": {
+    "true_negative": 100,
+    "false_positive": 0,
+    "false_negative": 8,
+    "true_positive": 0
+  }
+}

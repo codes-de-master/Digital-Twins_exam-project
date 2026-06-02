@@ -1,0 +1,25 @@
+{
+  "model_path": "/home/theau/Documents/polytech/MA1-telecom/Q2/Digital twins/exam-implementation/dataset/_computed/08-model-checkpoints/cnn_crack_weight_models/crack_weight_95p51/cnn_crack_classifier.keras",
+  "input_shape": [
+    50,
+    9
+  ],
+  "samples": 744,
+  "split_counts": {
+    "train": 528,
+    "val": 108,
+    "test": 108
+  },
+  "class_counts": {
+    "no_crack": 701,
+    "crack": 43
+  },
+  "seed": 2026,
+  "crack_class_weight": 95.51020408163265,
+  "confusion_matrix": {
+    "true_negative": 54,
+    "false_positive": 46,
+    "false_negative": 0,
+    "true_positive": 8
+  }
+}

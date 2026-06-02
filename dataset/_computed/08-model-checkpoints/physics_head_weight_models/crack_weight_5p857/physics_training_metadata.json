@@ -1,0 +1,40 @@
+{
+  "framework": "pytorch",
+  "model_path": "/home/theau/Documents/polytech/MA1-telecom/Q2/Digital twins/exam-implementation/dataset/_computed/08-model-checkpoints/physics_head_weight_models/crack_weight_5p857/physics_head_cnn.pt",
+  "input_shape": [
+    50,
+    9
+  ],
+  "residual_shape": [
+    50,
+    3
+  ],
+  "samples": 744,
+  "split_counts": {
+    "train": 528,
+    "val": 108,
+    "test": 108
+  },
+  "class_counts": {
+    "no_crack": 701,
+    "crack": 43
+  },
+  "seed": 2026,
+  "crack_class_weight": 5.857142857142857,
+  "physics_config": {
+    "young_modulus_pa": 22000000000.0,
+    "width_m": 0.034,
+    "thickness_m": 0.004,
+    "y_m": [
+      0.00145,
+      0.00145,
+      0.00145
+    ]
+  },
+  "confusion_matrix": {
+    "true_negative": 95,
+    "false_positive": 5,
+    "false_negative": 7,
+    "true_positive": 1
+  }
+}

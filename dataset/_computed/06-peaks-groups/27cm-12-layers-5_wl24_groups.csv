@@ -1,0 +1,4 @@
+experiment_id,channel,group_index,peak_in_group,group_peak_count,is_complete_group,is_complete_channel,channel_peak_count,extra_peaks_ignored,pressure_bar,force_n,displacement_mm,layers,span_cm,crack_marker,crack_label,row_index,sample_index,timestamp,time_s,effective_time_s,wavelength_nm,delta_nm,prominence
+27cm-12layers-5,24,0,0,3,0,0,3,0,1.0,147,61.34,12.0,27.0,,0,13276,13276,2025-08-27T13:13:34Z,2122.0,2122.9,1526.70564,1.9878299999998035,1.9627599999998893
+27cm-12layers-5,24,0,1,3,0,0,3,0,1.0,147,61.34,12.0,27.0,,0,13877,13877,2025-08-27T13:14:39Z,2187.0,2187.875,1526.92102,2.203209999999899,4.086630000000014
+27cm-12layers-5,24,0,2,3,0,0,3,0,1.0,147,61.34,12.0,27.0,,0,14167,14167,2025-08-27T13:15:09Z,2217.0,2217.4,1525.86919,1.15137999999979,1.15137999999979

@@ -1,0 +1,5 @@
+experiment_id,channel,group_index,peak_in_group,group_peak_count,is_complete_group,is_complete_channel,channel_peak_count,extra_peaks_ignored,pressure_bar,force_n,displacement_mm,layers,span_cm,crack_marker,crack_label,row_index,sample_index,timestamp,time_s,effective_time_s,wavelength_nm,delta_nm,prominence
+15cm-19layers-1-s,13,0,0,4,0,0,4,0,1.0,140,39.08,19.0,15.0,,0,5780,5780,2025-09-09T13:54:59Z,3585.0,3585.5,1538.97425,14.93146999999999,4.556370000000015
+15cm-19layers-1-s,13,0,1,4,0,0,4,0,1.0,140,39.08,19.0,15.0,,0,9156,9156,2025-09-09T14:01:00Z,3946.0,3946.2,1526.91106,2.8682799999999133,6.526879999999892
+15cm-19layers-1-s,13,0,2,4,0,0,4,0,1.0,140,39.08,19.0,15.0,,0,9169,9169,2025-09-09T14:01:01Z,3947.0,3947.5,1526.91091,2.8681300000000647,2.868439999999964
+15cm-19layers-1-s,13,0,3,4,0,0,4,0,1.0,140,39.08,19.0,15.0,,0,9173,9173,2025-09-09T14:01:01Z,3947.0,3947.9,1526.91091,2.8681300000000647,2.868439999999964

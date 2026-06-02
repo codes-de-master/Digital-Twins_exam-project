@@ -27,6 +27,7 @@ from digital_twin.features import build_feature_dataset, build_physics_residuals
 from digital_twin.models import (
     CNN_MODEL_PATH,
     PHYSICS_MODEL_PATH,
+    load_training_metadata,
     train_cnn,
     train_physics_head,
 )
@@ -240,6 +241,12 @@ def confusion_matrix_frame(confusion: dict[str, int]) -> pd.DataFrame:
     )
 
 
+def safe_int(value: object, default: int = 0) -> int:
+    if pd.isna(value):
+        return default
+    return int(value)
+
+
 def weight_label(weight: float) -> str:
     return f"{float(weight):.4g}".replace("-", "m").replace(".", "p")
 
@@ -248,6 +255,12 @@ def weighted_cnn_model_dir(weight: float, force_subdir: bool = False) -> Path:
     if np.isclose(weight, 1.0) and not force_subdir:
         return MODEL_DIR
     return MODEL_DIR / "cnn_crack_weight_models" / f"crack_weight_{weight_label(weight)}"
+
+
+def weighted_physics_model_dir(weight: float, force_subdir: bool = False) -> Path:
+    if np.isclose(weight, 1.0) and not force_subdir:
+        return MODEL_DIR
+    return MODEL_DIR / "physics_head_weight_models" / f"crack_weight_{weight_label(weight)}"
 
 
 def preprocess_one(
@@ -681,7 +694,7 @@ with tabs[7]:
                 max_value=2**31 - 1,
                 value=2026,
                 step=1,
-                help="Controls the file-level train/validation/test split and TensorFlow initialization.",
+                help="Controls the file-level train/validation/test split and PyTorch initialization.",
             )
             crack_weight = st.number_input(
                 "Crack class weight",
@@ -766,14 +779,6 @@ with tabs[7]:
                                     crack_class_weight=float(weight),
                                 )
                                 confusion = result.confusion_matrix
-                                actual_cracks = confusion.get("false_negative", 0) + confusion.get(
-                                    "true_positive", 0
-                                )
-                                false_negative_rate = (
-                                    confusion.get("false_negative", 0) / actual_cracks
-                                    if actual_cracks
-                                    else np.nan
-                                )
                                 sweep_rows.append(
                                     {
                                         "crack_class_weight": float(weight),
@@ -781,7 +786,6 @@ with tabs[7]:
                                         "false_negative": confusion.get(
                                             "false_negative", 0
                                         ),
-                                        "false_negative_rate": false_negative_rate,
                                         "false_positive": confusion.get(
                                             "false_positive", 0
                                         ),
@@ -818,30 +822,56 @@ with tabs[7]:
                                     name="False negatives",
                                 )
                             )
-                            if "false_negative_rate" in plot_frame.columns:
+                            if "false_positive" in plot_frame.columns:
                                 fig.add_trace(
                                     go.Scatter(
                                         x=plot_frame["crack_class_weight"],
-                                        y=plot_frame["false_negative_rate"],
+                                        y=plot_frame["false_positive"],
                                         mode="lines+markers",
-                                        name="False negative rate",
+                                        name="False positives",
                                         yaxis="y2",
                                     )
                                 )
                             fig.update_layout(
-                                title="False negatives vs crack class weight",
+                                title="False negatives and false positives vs crack class weight",
                                 xaxis_title="Crack class weight [-]",
                                 yaxis_title="False negatives [count]",
                                 yaxis2=dict(
-                                    title="False negative rate [-]",
+                                    title="False positives [count]",
                                     overlaying="y",
                                     side="right",
-                                    range=[0, 1],
                                 ),
                                 height=500,
                                 margin=dict(l=40, r=60, t=50, b=40),
                             )
                             st.plotly_chart(fig, width="stretch")
+                    selectable = sweep_frame.dropna(subset=["crack_class_weight"])
+                    if not selectable.empty:
+                        selected_weight = st.selectbox(
+                            "Confusion matrix crack class weight",
+                            selectable["crack_class_weight"].tolist(),
+                            format_func=lambda value: f"{float(value):.4g}",
+                        )
+                        selected_rows = selectable[
+                            np.isclose(
+                                selectable["crack_class_weight"].astype(float),
+                                float(selected_weight),
+                            )
+                        ]
+                        if not selected_rows.empty:
+                            selected_row = selected_rows.iloc[0].to_dict()
+                            matrix = {
+                                "true_negative": safe_int(selected_row.get("true_negative", 0)),
+                                "false_positive": safe_int(selected_row.get("false_positive", 0)),
+                                "false_negative": safe_int(selected_row.get("false_negative", 0)),
+                                "true_positive": safe_int(selected_row.get("true_positive", 0)),
+                            }
+                            metadata = load_training_metadata(
+                                Path(selected_row["model_dir"]) / "cnn_training_metadata.json"
+                            )
+                            if metadata and metadata.get("confusion_matrix"):
+                                matrix = metadata["confusion_matrix"]
+                            st.dataframe(confusion_matrix_frame(matrix), width="stretch")
 
 with tabs[8]:
     st.subheader("Physics Head + CNN")
@@ -921,6 +951,31 @@ with tabs[8]:
                 max_value=256,
                 value=32,
             )
+            physics_seed = st.number_input(
+                "Physics-head seed",
+                min_value=0,
+                max_value=2**31 - 1,
+                value=2026,
+                step=1,
+                help="Controls the file-level train/validation/test split and PyTorch initialization.",
+            )
+            physics_crack_weight = st.number_input(
+                "Physics-head crack class weight",
+                min_value=0.1,
+                max_value=1000.0,
+                value=1.0,
+                step=0.5,
+                help=(
+                    "Weight for class 1 during physics-head training. Increase it "
+                    "to penalize missed cracks more strongly."
+                ),
+            )
+            physics_target_model_dir = weighted_physics_model_dir(float(physics_crack_weight))
+            st.dataframe(
+                feature_dataset_summary(dataset, seed=int(physics_seed)),
+                width="stretch",
+            )
+            st.caption(f"Weighted physics checkpoint directory: {physics_target_model_dir}")
             if st.button("Train Physics Head + CNN"):
                 try:
                     result = train_physics_head(
@@ -928,7 +983,9 @@ with tabs[8]:
                         config,
                         epochs=int(epochs),
                         batch_size=int(batch_size),
-                        model_dir=MODEL_DIR,
+                        seed=int(physics_seed),
+                        model_dir=physics_target_model_dir,
+                        crack_class_weight=float(physics_crack_weight),
                     )
                     st.success(f"Saved model to {result.model_path}")
                     st.write(result.metrics)
@@ -940,3 +997,150 @@ with tabs[8]:
                     st.line_chart(pd.DataFrame(result.history))
                 except Exception as exc:
                     st.error(str(exc))
+            with st.expander("Physics-head crack-weight sweep"):
+                physics_sweep_min = st.number_input(
+                    "Physics sweep minimum crack weight",
+                    min_value=0.1,
+                    max_value=1000.0,
+                    value=1.0,
+                    step=0.5,
+                )
+                physics_sweep_max = st.number_input(
+                    "Physics sweep maximum crack weight",
+                    min_value=0.1,
+                    max_value=1000.0,
+                    value=8.0,
+                    step=0.5,
+                )
+                physics_sweep_count = st.number_input(
+                    "Physics sweep number of weights",
+                    min_value=2,
+                    max_value=50,
+                    value=5,
+                    step=1,
+                )
+                if st.button("Train Physics Head weight sweep"):
+                    if float(physics_sweep_max) < float(physics_sweep_min):
+                        st.error("Sweep maximum must be greater than or equal to minimum.")
+                    else:
+                        sweep_rows = []
+                        weights = np.linspace(
+                            float(physics_sweep_min),
+                            float(physics_sweep_max),
+                            int(physics_sweep_count),
+                        )
+                        progress = st.progress(0)
+                        for index, weight in enumerate(weights):
+                            weight_dir = weighted_physics_model_dir(
+                                float(weight),
+                                force_subdir=True,
+                            )
+                            try:
+                                result = train_physics_head(
+                                    dataset,
+                                    config,
+                                    epochs=int(epochs),
+                                    batch_size=int(batch_size),
+                                    seed=int(physics_seed),
+                                    model_dir=weight_dir,
+                                    crack_class_weight=float(weight),
+                                )
+                                confusion = result.confusion_matrix
+                                sweep_rows.append(
+                                    {
+                                        "crack_class_weight": float(weight),
+                                        "model_dir": str(weight_dir),
+                                        "false_negative": confusion.get("false_negative", 0),
+                                        "false_positive": confusion.get("false_positive", 0),
+                                        "true_positive": confusion.get("true_positive", 0),
+                                        "true_negative": confusion.get("true_negative", 0),
+                                        **result.metrics,
+                                    }
+                                )
+                            except Exception as exc:
+                                sweep_rows.append(
+                                    {
+                                        "crack_class_weight": float(weight),
+                                        "model_dir": str(weight_dir),
+                                        "error": str(exc),
+                                    }
+                                )
+                            progress.progress((index + 1) / len(weights))
+                        st.session_state["physics_weight_sweep"] = pd.DataFrame(sweep_rows)
+                physics_sweep_frame = st.session_state.get("physics_weight_sweep")
+                if physics_sweep_frame is not None and not physics_sweep_frame.empty:
+                    st.dataframe(physics_sweep_frame, width="stretch")
+                    if "false_negative" in physics_sweep_frame.columns:
+                        plot_frame = physics_sweep_frame.dropna(
+                            subset=["crack_class_weight", "false_negative"]
+                        )
+                        if not plot_frame.empty:
+                            best_frame = plot_frame.sort_values(
+                                [
+                                    "false_negative",
+                                    "false_positive",
+                                    "test_loss",
+                                ],
+                                na_position="last",
+                            ).head(1)
+                            st.write("Best candidate by false-negative priority")
+                            st.dataframe(best_frame, width="stretch")
+                            fig = go.Figure()
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=plot_frame["crack_class_weight"],
+                                    y=plot_frame["false_negative"],
+                                    mode="lines+markers",
+                                    name="False negatives",
+                                )
+                            )
+                            if "false_positive" in plot_frame.columns:
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=plot_frame["crack_class_weight"],
+                                        y=plot_frame["false_positive"],
+                                        mode="lines+markers",
+                                        name="False positives",
+                                        yaxis="y2",
+                                    )
+                                )
+                            fig.update_layout(
+                                title="Physics Head false negatives and false positives vs crack class weight",
+                                xaxis_title="Crack class weight [-]",
+                                yaxis_title="False negatives [count]",
+                                yaxis2=dict(
+                                    title="False positives [count]",
+                                    overlaying="y",
+                                    side="right",
+                                ),
+                                height=500,
+                                margin=dict(l=40, r=60, t=50, b=40),
+                            )
+                            st.plotly_chart(fig, width="stretch")
+                    selectable = physics_sweep_frame.dropna(subset=["crack_class_weight"])
+                    if not selectable.empty:
+                        selected_weight = st.selectbox(
+                            "Physics confusion matrix crack class weight",
+                            selectable["crack_class_weight"].tolist(),
+                            format_func=lambda value: f"{float(value):.4g}",
+                        )
+                        selected_rows = selectable[
+                            np.isclose(
+                                selectable["crack_class_weight"].astype(float),
+                                float(selected_weight),
+                            )
+                        ]
+                        if not selected_rows.empty:
+                            selected_row = selected_rows.iloc[0].to_dict()
+                            matrix = {
+                                "true_negative": safe_int(selected_row.get("true_negative", 0)),
+                                "false_positive": safe_int(selected_row.get("false_positive", 0)),
+                                "false_negative": safe_int(selected_row.get("false_negative", 0)),
+                                "true_positive": safe_int(selected_row.get("true_positive", 0)),
+                            }
+                            metadata = load_training_metadata(
+                                Path(selected_row["model_dir"]) / "physics_training_metadata.json"
+                            )
+                            if metadata and metadata.get("confusion_matrix"):
+                                matrix = metadata["confusion_matrix"]
+                            st.dataframe(confusion_matrix_frame(matrix), width="stretch")

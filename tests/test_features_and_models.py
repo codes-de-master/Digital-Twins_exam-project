@@ -74,9 +74,96 @@ def test_physics_residuals_respect_missing_sensor_mask():
     assert np.all(residuals[:, :, 1] == 0.0)
 
 
-@pytest.mark.skipif(importlib.util.find_spec("tensorflow") is None, reason="TensorFlow missing")
-def test_cnn_model_output_shape():
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="PyTorch missing")
+def test_pytorch_cnn_model_output_shape():
+    import torch
+
     from digital_twin.models import build_cnn
 
     model = build_cnn()
-    assert model.output_shape == (None, 1)
+    x = torch.zeros((2, 50, 9), dtype=torch.float32)
+    out = model(x)
+    assert tuple(out.shape) == (2,)
+
+
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="PyTorch missing")
+def test_pytorch_physics_head_model_output_shape():
+    import torch
+
+    from digital_twin.models import build_physics_head_cnn
+
+    model = build_physics_head_cnn()
+    signal = torch.zeros((2, 50, 9), dtype=torch.float32)
+    residual = torch.zeros((2, 50, 3), dtype=torch.float32)
+    out = model(signal, residual)
+    assert tuple(out.shape) == (2,)
+
+
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="PyTorch missing")
+def test_pytorch_cnn_training_smoke(tmp_path):
+    from digital_twin.models import train_cnn
+
+    rng = np.random.default_rng(2026)
+    dataset = FeatureDataset(
+        x=rng.normal(size=(12, 50, 9)).astype(float),
+        y=np.array([0, 1, 0] * 4),
+        meta=pd.DataFrame(
+            {
+                "source_name": ["a"] * 3 + ["b"] * 3 + ["c"] * 3 + ["d"] * 3,
+                "group_index": list(range(3)) * 4,
+            }
+        ),
+    )
+    result = train_cnn(
+        dataset,
+        epochs=1,
+        batch_size=4,
+        seed=2026,
+        model_dir=tmp_path,
+        crack_class_weight=2.0,
+    )
+    assert result.model_path.suffix == ".pt"
+    assert result.model_path.exists()
+    assert result.confusion_matrix
+
+
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="PyTorch missing")
+def test_pytorch_physics_head_training_smoke(tmp_path):
+    from digital_twin.models import load_training_metadata, train_physics_head
+
+    rng = np.random.default_rng(2026)
+    dataset = FeatureDataset(
+        x=rng.normal(size=(12, 50, 9)).astype(float),
+        y=np.array([0, 1, 0] * 4),
+        meta=pd.DataFrame(
+            {
+                "source_name": ["a"] * 3 + ["b"] * 3 + ["c"] * 3 + ["d"] * 3,
+                "group_index": list(range(3)) * 4,
+                "force_n": np.linspace(100.0, 200.0, 12),
+                "span_cm": [15.0] * 12,
+                "slot_1_used": [1] * 12,
+                "slot_2_used": [1] * 12,
+                "slot_3_used": [1] * 12,
+            }
+        ),
+    )
+    config = PhysicsConfig(
+        young_modulus_pa=22e9,
+        width_m=0.034,
+        thickness_m=0.004,
+        y_m=(0.00145, 0.00145, 0.00145),
+    )
+    result = train_physics_head(
+        dataset,
+        config,
+        epochs=1,
+        batch_size=4,
+        seed=2026,
+        model_dir=tmp_path,
+        crack_class_weight=3.0,
+    )
+    assert result.model_path.suffix == ".pt"
+    assert result.model_path.exists()
+    assert result.confusion_matrix
+    metadata = load_training_metadata(tmp_path / "physics_training_metadata.json")
+    assert metadata["crack_class_weight"] == 3.0
